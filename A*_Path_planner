@@ -1,0 +1,52 @@
+# Path planning
+def path_planning_module(plot_dir=PLOTS_DIR, grid_size=10):
+    print("[PATH] Starting A* path planning module...")
+    import heapq
+    terrain_cost = np.random.randint(1,5,(grid_size,grid_size))
+    obstacles = (np.random.rand(grid_size,grid_size) < 0.2).astype(int)
+    cost_map = terrain_cost + obstacles * 50
+
+    def heuristic(a,b):
+        return np.linalg.norm(np.array(a)-np.array(b))
+
+    def astar(start,goal,cost_map):
+        open_set = []
+        heapq.heappush(open_set,(0,start))
+        came_from = {}
+        gscore = {start:0}
+        while open_set:
+            _, current = heapq.heappop(open_set)
+            if current == goal:
+                path = []
+                while current in came_from:
+                    path.append(current)
+                    current = came_from[current]
+                path.append(start)
+                return path[::-1]
+            x,y = current
+            for dx,dy in [(-1,0),(1,0),(0,-1),(0,1)]:
+                nx,ny = x+dx, y+dy
+                if 0<=nx<grid_size and 0<=ny<grid_size:
+                    neighbor = (nx,ny)
+                    tentative_g = gscore[current] + cost_map[nx,ny]
+                    if neighbor not in gscore or tentative_g < gscore[neighbor]:
+                        gscore[neighbor] = tentative_g
+                        fscore = tentative_g + heuristic(neighbor,goal)
+                        heapq.heappush(open_set,(fscore,neighbor))
+                        came_from[neighbor] = current
+        return []
+
+    start, goal = (0,0), (grid_size-1, grid_size-1)
+    path = astar(start, goal, cost_map)
+    plt.figure(figsize=(6,5))
+    plt.imshow(cost_map, cmap='viridis', origin='upper')
+    if path:
+        px, py = zip(*path)
+        plt.plot(py, px, 'r-', linewidth=2)
+    plt.title("A* Path Planning on Cost Map")
+    plt.colorbar(label='Cost')
+    plt.tight_layout(); plt.savefig(Path(plot_dir)/"path_with_obstacles.png", dpi=300); plt.close()
+    plt.figure(figsize=(6,5))
+    plt.imshow(cost_map, cmap='viridis', origin='upper')
+    plt.colorbar(label='Cost'); plt.tight_layout(); plt.savefig(Path(plot_dir)/"path_costmap.png", dpi=300); plt.close()
+    print("[PATH] Saved path plots.")
