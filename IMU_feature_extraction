@@ -1,0 +1,33 @@
+# Feature extraction
+def sliding_windows(df, window_size=20, step_size=10):
+    """Extract sliding windows of IMU data from a dataframe."""
+    X_windows = []
+    y_windows = []
+    signals = ["ax","ay","az","gx","gy","gz"]
+    n = len(df)
+    if n < window_size:
+        return np.empty((0,)), np.empty((0,))
+
+    for start in range(0, n - window_size + 1, step_size):
+        window = df.iloc[start:start + window_size]
+        terrain = window["terrain"].iloc[0]
+        y_windows.append(terrain)
+        features = []
+        # time-domain features
+        for sig in signals:
+            arr = window[sig].values
+            features.append(arr.mean())
+            features.append(arr.std())
+            features.append(arr.max())
+            features.append(arr.min())
+            features.append(np.sqrt(np.mean(arr**2)))  # RMS
+        # FFT features for ax and az
+        for sig in ["ax","az"]:
+            arr = window[sig].values
+            fft_vals = np.abs(np.fft.rfft(arr))
+            dom_freq = np.argmax(fft_vals)
+            energy = np.sum(fft_vals**2)
+            features.append(dom_freq)
+            features.append(energy)
+        X_windows.append(features)
+    return np.array(X_windows), np.array(y_windows)
