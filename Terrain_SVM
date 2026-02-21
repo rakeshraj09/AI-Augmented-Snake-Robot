@@ -1,0 +1,75 @@
+# Terrain classification module
+def terrain_svm_module(X, y, plot_dir=PLOTS_DIR, models_dir=MODELS_DIR):
+    label_map = {"tile":0,"carpet":1,"grass":2,"sand":3}
+    inv_label_map = {v:k for k,v in label_map.items()}
+    y_encoded = np.array([label_map[label] for label in y])
+
+    # scale
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    # train/test split
+    X_train, X_test, y_train, y_test = train_test_split(
+        X_scaled, y_encoded, test_size=0.2, stratify=y_encoded, random_state=42
+    )
+
+    # SVM training
+    svm_clf = SVC(kernel="rbf", C=1.0, gamma="scale", probability=False)
+    svm_clf.fit(X_train, y_train)
+
+    # cross-validation on full scaled set
+    scores = cross_val_score(svm_clf, X_scaled, y_encoded, cv=5)
+    cv_mean, cv_std = scores.mean(), scores.std()
+    print(f"[SVM] CV accuracy = {cv_mean:.4f} ± {cv_std:.4f}")
+
+    # evaluation on test set
+    y_pred = svm_clf.predict(X_test)
+    print("[SVM] Classification report (test set):")
+    print(classification_report(y_test, y_pred, target_names=[inv_label_map[i] for i in range(4)]))
+
+    # confusion matrix
+    cm = confusion_matrix(y_test, y_pred)
+    plt.figure(figsize=(6,5))
+    sns.heatmap(cm, annot=True, fmt="d",
+                xticklabels=[inv_label_map[i] for i in range(4)],
+                yticklabels=[inv_label_map[i] for i in range(4)],
+                cmap="Blues")
+    plt.xlabel("Predicted"); plt.ylabel("Actual")
+    plt.title("Terrain Classification Confusion Matrix")
+    conf_path = Path(plot_dir) / "terrain_confusion_matrix.png"
+    plt.tight_layout(); plt.savefig(conf_path, dpi=300); plt.close()
+    print(f"[SVM] Saved confusion matrix -> {conf_path}")
+
+    # PCA visualization
+    pca = PCA(n_components=2)
+    X_pca = pca.fit_transform(X_scaled)
+    plt.figure(figsize=(6,5))
+    colors = ['r','g','b','m']
+    names = [inv_label_map[i] for i in range(4)]
+    for lbl, color, name in zip(range(4), colors, names):
+        idx = (y_encoded == lbl)
+        plt.scatter(X_pca[idx,0], X_pca[idx,1], c=color, label=name, alpha=0.6, s=10)
+    plt.xlabel("PC1"); plt.ylabel("PC2"); plt.legend()
+    plt.title("PCA of IMU Features by Terrain")
+    pca_path = Path(plot_dir) / "terrain_pca.png"
+    plt.tight_layout(); plt.savefig(pca_path, dpi=300); plt.close()
+    print(f"[SVM] Saved PCA plot -> {pca_path}")
+
+    # save model + scaler + CV metadata
+    joblib.dump(svm_clf, Path(models_dir)/"terrain_svm.pkl")
+    joblib.dump(scaler, Path(models_dir)/"imu_scaler.pkl")
+    with open(Path(models_dir)/"terrain_cv.json", "w") as fh:
+        json.dump({"cv_mean": float(cv_mean), "cv_std": float(cv_std)}, fh)
+
+    print("[SVM] Module complete.")
+    return {
+        "svm": svm_clf,
+        "scaler": scaler,
+        "X_scaled": X_scaled,
+        "y_encoded": y_encoded,
+        "cv_mean": cv_mean,
+        "cv_std": cv_std,
+        "X_test": X_test,
+        "y_test": y_test,
+        "y_pred": y_pred
+    }
