@@ -1,0 +1,86 @@
+# Thermal CNN module
+def thermal_cnn_module(plot_dir=PLOTS_DIR, models_dir=MODELS_DIR, size=16, N=1000):
+    # generator
+    def make_heatmap(hotspot=True, size=size):
+        x = np.linspace(-1,1,size); y = np.linspace(-1,1,size)
+        Xg, Yg = np.meshgrid(x,y)
+        if hotspot:
+            cx, cy = np.random.uniform(-0.5,0.5,2)
+            sigma = np.random.uniform(0.15,0.45)
+            gauss = np.exp(-((Xg-cx)**2 + (Yg-cy)**2)/(2*sigma**2))
+            base = 0.12*np.random.randn(size,size)
+            img = gauss + base
+        else:
+            img = 0.12*np.random.randn(size,size)
+        img = (img - img.min()) / (img.max() - img.min() + 1e-8)
+        return img.astype("float32")
+
+    # build dataset
+    Xh = []
+    yh = []
+    for _ in range(N):
+        label = np.random.randint(0,2)
+        Xh.append(make_heatmap(hotspot=bool(label)))
+        yh.append(label)
+    Xh = np.array(Xh)[..., np.newaxis]
+    yh = np.array(yh)
+
+    # split
+    X_train, X_temp, y_train, y_temp = train_test_split(Xh, yh, test_size=0.3, random_state=42, stratify=yh)
+    X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, random_state=42, stratify=y_temp)
+
+    # model
+    input_shape = X_train.shape[1:]
+    model = models.Sequential([
+        layers.Conv2D(16,(3,3),activation='relu',input_shape=input_shape),
+        layers.MaxPooling2D((2,2)),
+        layers.Conv2D(32,(3,3),activation='relu'),
+        layers.MaxPooling2D((2,2)),
+        layers.Flatten(),
+        layers.Dense(64, activation='relu'),
+        layers.Dense(1, activation='sigmoid')
+    ])
+    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+
+    # train
+    history = model.fit(X_train, y_train, validation_data=(X_val, y_val), epochs=20, batch_size=32, verbose=0)
+
+    # plot accuracy curve
+    plt.figure()
+    plt.plot(history.history['accuracy'], label='train')
+    plt.plot(history.history['val_accuracy'], label='val')
+    plt.xlabel("Epoch"); plt.ylabel("Accuracy"); plt.legend()
+    plt.title("Thermal CNN Accuracy")
+    acc_path = Path(plot_dir) / "thermal_cnn_accuracy.png"
+    plt.tight_layout(); plt.savefig(acc_path, dpi=300); plt.close()
+    print(f"[THERMAL] Saved accuracy curve -> {acc_path}")
+
+    # test confusion matrix
+    y_pred = (model.predict(X_test) > 0.5).astype(int).reshape(-1)
+    cm = confusion_matrix(y_test, y_pred)
+    plt.figure(figsize=(5,4))
+    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues")
+    plt.xlabel("Predicted"); plt.ylabel("Actual"); plt.title("Thermal CNN Confusion Matrix")
+    cm_path = Path(plot_dir) / "thermal_cnn_confusion_matrix.png"
+    plt.tight_layout(); plt.savefig(cm_path, dpi=300); plt.close()
+    print(f"[THERMAL] Saved confusion matrix -> {cm_path}")
+
+    # save 3 examples
+    for i in range(3):
+        plt.figure(figsize=(3,3))
+        plt.imshow(X_test[i,...,0], cmap='hot')
+        plt.title(f"True: {y_test[i]}, Pred: {y_pred[i]}")
+        plt.colorbar()
+        ex_path = Path(plot_dir) / f"thermal_example_{i+1}.png"
+        plt.tight_layout(); plt.savefig(ex_path, dpi=300); plt.close()
+    print("[THERMAL] Saved example heatmaps.")
+
+    model.save(Path(models_dir)/"thermal_cnn.h5")
+    print("[THERMAL] Model saved.")
+
+    return {
+        "model": model,
+        "X_test": X_test,
+        "y_test": y_test,
+        "y_pred": y_pred
+    }
