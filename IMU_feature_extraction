@@ -1,6 +1,5 @@
 # Feature extraction
 def sliding_windows(df, window_size=20, step_size=10):
-    """Extract sliding windows of IMU data from a dataframe."""
     X_windows = []
     y_windows = []
     signals = ["ax","ay","az","gx","gy","gz"]
